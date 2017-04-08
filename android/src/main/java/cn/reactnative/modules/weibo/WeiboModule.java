@@ -26,7 +26,6 @@ import com.facebook.drawee.backends.pipeline.Fresco;
 import com.facebook.drawee.drawable.OrientedDrawable;
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.core.ImagePipeline;
-import com.facebook.imagepipeline.image.CloseableAnimatedImage;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.CloseableStaticBitmap;
 import com.facebook.imagepipeline.image.EncodedImage;
@@ -57,6 +56,7 @@ import com.sina.weibo.sdk.auth.Oauth2AccessToken;
 import com.sina.weibo.sdk.auth.WeiboAuthListener;
 import com.sina.weibo.sdk.auth.sso.SsoHandler;
 import com.sina.weibo.sdk.exception.WeiboException;
+import com.sina.weibo.sdk.utils.Utility;
 
 import java.util.Date;
 
@@ -78,7 +78,9 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         if (!appInfo.metaData.containsKey("WB_APPID")){
             throw new Error("meta-data WB_APPID not found in AndroidManifest.xml");
         }
-        this.appId = appInfo.metaData.get("WB_APPID").toString();
+        this.appId = appInfo.metaData.getString("WB_APPID");
+        this.appId = this.appId.substring(2);
+
     }
 
     private static final String RCTWBEventName = "Weibo_Resp";
@@ -187,12 +189,19 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         callback.invoke();
     }
 
-    @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (mSinaSsoHandler != null) {
             mSinaSsoHandler.authorizeCallBack(requestCode, resultCode, data);
             mSinaSsoHandler = null;
         }
+    }
+
+    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data){
+        this.onActivityResult(requestCode, resultCode, data);
+    }
+
+    public void onNewIntent(Intent intent){
+
     }
 
     WeiboAuthListener genWeiboAuthListener() {
@@ -241,11 +250,6 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
 
         this.registerShare();
         WeiboMultiMessage weiboMessage = new WeiboMultiMessage();//初始化微博的分享消息
-        TextObject textObject = new TextObject();
-        if (data.hasKey(RCTWBShareText)) {
-            textObject.text = data.getString(RCTWBShareText);
-        }
-        weiboMessage.textObject = textObject;
 
         String type = RCTWBShareTypeNews;
         if (data.hasKey(RCTWBShareType)){
@@ -253,6 +257,11 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         }
 
         if (type.equals(RCTWBShareTypeText)) {
+            TextObject textObject = new TextObject();
+            if (data.hasKey(RCTWBShareText)) {
+                textObject.text = data.getString(RCTWBShareText);
+            }
+            weiboMessage.textObject = textObject;
         }
         else if (type.equals(RCTWBShareTypeImage)) {
             ImageObject imageObject = new ImageObject();
@@ -293,7 +302,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
             if (bitmap != null) {
                 weiboMessage.mediaObject.setThumbImage(bitmap);
             }
-            weiboMessage.mediaObject.identify = new Date().toString();
+            weiboMessage.mediaObject.identify = Utility.generateGUID();
         }
 
         SendMultiMessageToWeiboRequest request = new SendMultiMessageToWeiboRequest();
@@ -418,9 +427,6 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
             } else {
                 return new OrientedDrawable(bitmapDrawable, closeableStaticBitmap.getRotationAngle());
             }
-        } else if (closeableImage instanceof CloseableAnimatedImage) {
-            return Fresco.getImagePipelineFactory().getAnimatedDrawableFactory().create(
-                    ((CloseableAnimatedImage) closeableImage).getImageResult());
         } else {
             throw new UnsupportedOperationException("Unrecognized image class: " + closeableImage);
         }

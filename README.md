@@ -10,16 +10,10 @@ npm install react-native-weibo --save
 ```
 
 ### 2.link
-#### 自动link方法~ rnpm requires node version 4.1 or higher
+#### 自动link方法
 
 ```bash
-rnpm link
-```
-link成功命令行会提示
-
-```bash
-rnpm info Linking react-native-weibo android dependency 
-rnpm info Linking react-native-weibo ios dependency
+react-native link
 ```
 
 #### 手动link~（如果不能够自动link）
@@ -48,22 +42,34 @@ dependencies {
 }
 ```
 
-`android/app/src/main/java/<你的包名>/MainActivity.java`中，`public class MainActivity`之前增加：
+`android/app/src/main/java/<你的包名>/MainApplication.java`中添加如下两行：
 
 ```java
-import cn.reactnative.modules.weibo.WeiboPackage;
-```
+...
+import cn.reactnative.modules.weibo.WeiboPackage;  // 在public class MainApplication之前import
 
-如果react-native-版本 <0.18.0
-`.addPackage(new MainReactPackage())`之后增加：
+public class MainApplication extends Application implements ReactApplication {
 
-```java
-.addPackage(new WeiboPackage())
-```
-如果react-native-版本 >=0.18.0
-在`new MainReactPackage()`之后增加
-```java
-,new WeiboPackage()
+  private final ReactNativeHost mReactNativeHost = new ReactNativeHost(this) {
+    @Override
+    protected boolean getUseDeveloperSupport() {
+      return BuildConfig.DEBUG;
+    }
+
+    @Override
+    protected List<ReactPackage> getPackages() {
+      return Arrays.<ReactPackage>asList(
+          new WeiboPackage(), // 然后添加这一行
+          new MainReactPackage()
+      );
+    }
+  };
+
+  @Override
+  public ReactNativeHost getReactNativeHost() {
+      return mReactNativeHost;
+  }
+}
 ```
 
 ### 3.工程配置
@@ -120,7 +126,7 @@ import cn.reactnative.modules.weibo.WeiboPackage;
 
 ```
 manifestPlaceholders = [
-    WB_APPID: "微博的APPID"		//在此修改微博APPID
+    WB_APPID: "微博的APPID"		//在此修改微博APPID, like 'wb+APP_KEY'
 ]
 ```
 
@@ -166,7 +172,7 @@ config : {
 }
 ```
 
-#### WeiboAPI.shareToWeibo(data)
+#### WeiboAPI.share(data)
 
 分享到微博
 
@@ -184,5 +190,15 @@ config : {
 	type: 'image',
 	text: 文字内容,	
 	imageUrl: 图片地址	
+}
+```
+```javascript
+// 分享网页
+{
+        type: 'news',
+        title: 标题,
+        description: 描述,
+        imageUrl: 缩略图地址,   //缩略图大小限制32k一下
+        webpageUrl: 网页地址
 }
 ```

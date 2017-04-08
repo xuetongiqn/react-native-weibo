@@ -8,9 +8,16 @@
 
 #import "RCTWeiboAPI.h"
 #import "WeiboSDK.h"
+
+#if __has_include(<React/RCTBridge.h>)
+#import <React/RCTBridge.h>
+#import <React/RCTEventDispatcher.h>
+#import <React/RCTImageLoader.h>
+#else
 #import "RCTBridge.h"
 #import "RCTEventDispatcher.h"
 #import "RCTImageLoader.h"
+#endif
 
 #define INVOKE_FAILED (@"WeiBo API invoke returns false.")
 #define RCTWBEventName (@"Weibo_Resp")
@@ -51,7 +58,7 @@ RCT_EXPORT_MODULE();
 {
     self = [super init];
     if (self) {
-        
+
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleOpenURL:) name:@"RCTOpenURLNotification" object:nil];
     }
     return self;
@@ -66,7 +73,7 @@ RCT_EXPORT_METHOD(login:(NSDictionary *)config
                   :(RCTResponseSenderBlock)callback)
 {
     [self _autoRegisterAPI];
-    
+
     WBAuthorizeRequest *request = [self _genAuthRequest:config];
     BOOL success = [WeiboSDK sendRequest:request];
     callback(@[success?[NSNull null]:INVOKE_FAILED]);
@@ -88,7 +95,7 @@ RCT_EXPORT_METHOD(shareToWeibo:(NSDictionary *)aData
         if (![aData[RCTWBShareType] isEqualToString:RCTWBShareTypeImage]) {
             size = CGSizeMake(80,80);
         }
-        [_bridge.imageLoader loadImageWithTag:imageUrl size:size scale:1 resizeMode:UIViewContentModeScaleToFill progressBlock:nil completionBlock:^(NSError *error, UIImage *image) {
+        [_bridge.imageLoader loadImageWithURLRequest:[RCTConvert NSURLRequest:imageUrl] size:size scale:1 clipped:FALSE resizeMode:UIViewContentModeScaleToFill progressBlock:nil partialLoadBlock: nil completionBlock:^(NSError *error, UIImage *image) {
             [self _shareWithData:aData image:image];
         }];
     }
