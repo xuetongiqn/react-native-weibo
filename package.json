@@ -1,5 +1,5 @@
 {
-  "name": "@xuetongiqn/react-native-weibo",
+  "name": "react-native-weibo",
   "version": "3.0.5",
   "description": "新浪微博登录、分享模块",
   "main": "index.js",
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xuetongiqn/react-native-weibo.git"
+    "url": "git+https://github.com/magicismight/react-native-weibo.git"
   },
   "keywords": [
     "react-native",
@@ -22,9 +22,9 @@
   "author": "xuetongqin",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/xuetongiqn/react-native-weibo/issues"
+    "url": "https://github.com/magicismight/react-native-weibo/issues"
   },
-  "homepage": "https://github.com/xuetongiqn/react-native-weibo#readme",
+  "homepage": "https://github.com/magicismight/react-native-weibo#readme",
   "dependencies": {
     "bluebird": "^3.5.0"
   }
