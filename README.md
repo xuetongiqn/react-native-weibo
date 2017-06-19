@@ -104,7 +104,7 @@ public class MainApplication extends Application implements ReactApplication {
 	<key>NSAppTransportSecurity</key>
 	<dict>
 	<key>NSAllowsArbitraryLoads</key>
-	</true>
+	<true/>
 	</dict>
 
 ###### b.对应用跳转的支持
@@ -126,7 +126,7 @@ public class MainApplication extends Application implements ReactApplication {
 
 ```
 manifestPlaceholders = [
-    WB_APPID: "微博的APPID"		//在此修改微博APPID
+    WB_APPID: "微博的APPID"		//在此修改微博APPID, like 'wb+APP_KEY'
 ]
 ```
 
@@ -190,5 +190,15 @@ config : {
 	type: 'image',
 	text: 文字内容,	
 	imageUrl: 图片地址	
+}
+```
+```javascript
+// 分享网页
+{
+        type: 'news',
+        title: 标题,
+        description: 描述,
+        imageUrl: 缩略图地址,   //缩略图大小限制32k一下
+        webpageUrl: 网页地址
 }
 ```
