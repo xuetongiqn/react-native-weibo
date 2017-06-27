@@ -78,7 +78,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         if (!appInfo.metaData.containsKey("WB_APPID")){
             throw new Error("meta-data WB_APPID not found in AndroidManifest.xml");
         }
-        this.appId = appInfo.metaData.getString("WB_APPID");
+        this.appId = appInfo.metaData.get("WB_APPID").toString();
         this.appId = this.appId.substring(2);
 
     }
