@@ -14,7 +14,6 @@ import android.graphics.drawable.NinePatchDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Parcel;
-import android.util.Log;
 
 import com.facebook.common.executors.UiThreadImmediateExecutorService;
 import com.facebook.common.internal.Closeables;
@@ -26,16 +25,8 @@ import com.facebook.datasource.DataSource;
 import com.facebook.datasource.DataSubscriber;
 import com.facebook.drawee.backends.pipeline.Fresco;
 import com.facebook.drawee.drawable.OrientedDrawable;
-import com.facebook.imagepipeline.animated.base.AnimatedDrawable;
-import com.facebook.imagepipeline.animated.base.AnimatedDrawableOptions;
-import com.facebook.imagepipeline.animated.base.AnimatedDrawableOptionsBuilder;
-import com.facebook.imagepipeline.animated.base.AnimatedImage;
-import com.facebook.imagepipeline.animated.base.AnimatedImageResult;
-import com.facebook.imagepipeline.animated.factory.AnimatedDrawableFactory;
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.core.ImagePipeline;
-import com.facebook.imagepipeline.image.CloseableAnimatedImage;
-import com.facebook.imagepipeline.image.CloseableBitmap;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.CloseableStaticBitmap;
 import com.facebook.imagepipeline.image.EncodedImage;
@@ -73,7 +64,6 @@ import com.sina.weibo.sdk.utils.Utility;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Date;
 
 import javax.annotation.Nullable;
 
@@ -472,12 +462,6 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
             } else {
                 return new OrientedDrawable(bitmapDrawable, closeableStaticBitmap.getRotationAngle());
             }
-        } else if (closeableImage instanceof CloseableAnimatedImage) {
-            AnimatedDrawableFactory animatedDrawableFactory = Fresco.getImagePipelineFactory().getAnimatedFactory().getAnimatedDrawableFactory(getReactApplicationContext());
-            if (animatedDrawableFactory != null) {
-                return animatedDrawableFactory.create(closeableImage);
-            }
-            return null;
         } else {
             throw new UnsupportedOperationException("Unrecognized image class: " + closeableImage);
         }
