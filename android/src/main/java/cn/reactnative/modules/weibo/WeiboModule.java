@@ -13,9 +13,11 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.NinePatchDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Parcel;
 import android.util.Log;
 
 import com.facebook.common.executors.UiThreadImmediateExecutorService;
+import com.facebook.common.internal.Closeables;
 import com.facebook.common.internal.Preconditions;
 import com.facebook.common.references.CloseableReference;
 import com.facebook.common.util.UriUtil;
@@ -24,11 +26,21 @@ import com.facebook.datasource.DataSource;
 import com.facebook.datasource.DataSubscriber;
 import com.facebook.drawee.backends.pipeline.Fresco;
 import com.facebook.drawee.drawable.OrientedDrawable;
+import com.facebook.imagepipeline.animated.base.AnimatedDrawable;
+import com.facebook.imagepipeline.animated.base.AnimatedDrawableOptions;
+import com.facebook.imagepipeline.animated.base.AnimatedDrawableOptionsBuilder;
+import com.facebook.imagepipeline.animated.base.AnimatedImage;
+import com.facebook.imagepipeline.animated.base.AnimatedImageResult;
+import com.facebook.imagepipeline.animated.factory.AnimatedDrawableFactory;
 import com.facebook.imagepipeline.common.ResizeOptions;
 import com.facebook.imagepipeline.core.ImagePipeline;
+import com.facebook.imagepipeline.image.CloseableAnimatedImage;
+import com.facebook.imagepipeline.image.CloseableBitmap;
 import com.facebook.imagepipeline.image.CloseableImage;
 import com.facebook.imagepipeline.image.CloseableStaticBitmap;
 import com.facebook.imagepipeline.image.EncodedImage;
+import com.facebook.imagepipeline.memory.PooledByteBuffer;
+import com.facebook.imagepipeline.memory.PooledByteBufferInputStream;
 import com.facebook.imagepipeline.request.ImageRequest;
 import com.facebook.imagepipeline.request.ImageRequestBuilder;
 import com.facebook.react.bridge.ActivityEventListener;
@@ -58,6 +70,9 @@ import com.sina.weibo.sdk.auth.sso.SsoHandler;
 import com.sina.weibo.sdk.exception.WeiboException;
 import com.sina.weibo.sdk.utils.Utility;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Date;
 
 import javax.annotation.Nullable;
@@ -65,23 +80,7 @@ import javax.annotation.Nullable;
 /**
  * Created by lvbingru on 12/22/15.
  */
-public class WeiboModule extends ReactContextBaseJavaModule implements ActivityEventListener  {
-
-    public WeiboModule(ReactApplicationContext reactContext) {
-        super(reactContext);
-        ApplicationInfo appInfo = null;
-        try {
-            appInfo = reactContext.getPackageManager().getApplicationInfo(reactContext.getPackageName(), PackageManager.GET_META_DATA);
-        } catch (PackageManager.NameNotFoundException e) {
-            throw new Error(e);
-        }
-        if (!appInfo.metaData.containsKey("WB_APPID")){
-            throw new Error("meta-data WB_APPID not found in AndroidManifest.xml");
-        }
-        this.appId = appInfo.metaData.get("WB_APPID").toString();
-        this.appId = this.appId.substring(2);
-
-    }
+public class WeiboModule extends ReactContextBaseJavaModule implements ActivityEventListener {
 
     private static final String RCTWBEventName = "Weibo_Resp";
 
@@ -104,6 +103,21 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
     private static final String RCTWBShareAccessToken = "accessToken";
 
     private static WeiboModule gModule = null;
+
+    public WeiboModule(ReactApplicationContext reactContext) {
+        super(reactContext);
+        ApplicationInfo appInfo = null;
+        try {
+            appInfo = reactContext.getPackageManager().getApplicationInfo(reactContext.getPackageName(), PackageManager.GET_META_DATA);
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new Error(e);
+        }
+        if (!appInfo.metaData.containsKey("WB_APPID")) {
+            throw new Error("meta-data WB_APPID not found in AndroidManifest.xml");
+        }
+        this.appId = appInfo.metaData.getString("WB_APPID");
+        this.appId = this.appId.substring(2);
+    }
 
     @Override
     public void initialize() {
@@ -134,7 +148,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
 
 
     @ReactMethod
-    public void login(final ReadableMap config, final Callback callback){
+    public void login(final ReadableMap config, final Callback callback) {
 
         AuthInfo sinaAuthInfo = this._genAuthInfo(config);
         mSinaSsoHandler = new SsoHandler(getCurrentActivity(), sinaAuthInfo);
@@ -143,50 +157,67 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
     }
 
     @ReactMethod
-    public void shareToWeibo(final ReadableMap data, Callback callback){
+    public void shareToWeibo(final ReadableMap data, Callback callback) {
 
         if (data.hasKey(RCTWBShareImageUrl)) {
             String imageUrl = data.getString(RCTWBShareImageUrl);
-            DataSubscriber<CloseableReference<CloseableImage>> dataSubscriber =
-                    new BaseDataSubscriber<CloseableReference<CloseableImage>>() {
-                        @Override
-                        public void onNewResultImpl(DataSource<CloseableReference<CloseableImage>> dataSource) {
-                            // isFinished must be obtained before image, otherwise we might set intermediate result
-                            // as final image.
-                            boolean isFinished = dataSource.isFinished();
-//                        float progress = dataSource.getProgress();
-                            CloseableReference<CloseableImage> image = dataSource.getResult();
-                            if (image != null) {
-                                Drawable drawable = _createDrawable(image);
-                                Bitmap bitmap = _drawable2Bitmap(drawable);
-                                _share(data, bitmap);
-                            } else if (isFinished) {
-                                _share(data, null);
-                            }
-                            dataSource.close();
-                        }
-                        @Override
-                        public void onFailureImpl(DataSource<CloseableReference<CloseableImage>> dataSource) {
-                            dataSource.close();
-                            _share(data, null);
-                        }
 
-                        @Override
-                        public void onProgressUpdate(DataSource<CloseableReference<CloseableImage>> dataSource) {
+            DataSubscriber<CloseableReference<PooledByteBuffer>> dataSubscriber =
+                new BaseDataSubscriber<CloseableReference<PooledByteBuffer>>() {
+
+                    @Override
+                    protected void onNewResultImpl(DataSource<CloseableReference<PooledByteBuffer>> dataSource) {
+                        // isFinished must be obtained before image, otherwise we might set intermediate result
+                        // as final image.
+                        boolean isFinished = dataSource.isFinished();
+                        CloseableReference<PooledByteBuffer> image = dataSource.getResult();
+                        if (image != null) {
+                            Preconditions.checkState(CloseableReference.isValid(image));
+                            PooledByteBuffer result = image.get();
+                            InputStream inputStream = new PooledByteBufferInputStream(result);
+                            try {
+                                _shareBytes(data, getBytes(inputStream));
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            } finally {
+                                Closeables.closeQuietly(inputStream);
+                            }
+                        } else if (isFinished) {
+                            _share(data);
                         }
-                    };
+                        dataSource.close();
+                    }
+
+                    @Override
+                    protected void onFailureImpl(DataSource<CloseableReference<PooledByteBuffer>> dataSource) {
+                        dataSource.close();
+                        _share(data);
+                    }
+                };
+
             ResizeOptions resizeOptions = null;
             if (!data.hasKey(RCTWBShareType) || !data.getString(RCTWBShareType).equals(RCTWBShareTypeImage)) {
                 resizeOptions = new ResizeOptions(80, 80);
             }
 
             this._downloadImage(imageUrl, resizeOptions, dataSubscriber);
-        }
-        else {
-            this._share(data, null);
+        } else {
+            this._share(data);
         }
 
         callback.invoke();
+    }
+
+    public byte[] getBytes(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        int bufferSize = 1024;
+        byte[] buffer = new byte[bufferSize];
+
+        int len = 0;
+        while ((len = inputStream.read(buffer)) != -1) {
+            byteBuffer.write(buffer, 0, len);
+        }
+        return byteBuffer.toByteArray();
     }
 
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -196,11 +227,11 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         }
     }
 
-    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data){
+    public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
         this.onActivityResult(requestCode, resultCode, data);
     }
 
-    public void onNewIntent(Intent intent){
+    public void onNewIntent(Intent intent) {
 
     }
 
@@ -246,13 +277,24 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         };
     }
 
-    private void _share(ReadableMap data, Bitmap bitmap) {
+    private void _shareBitmap(ReadableMap data, Bitmap bitmap) {
+        this._share(data, bitmap, null);
+    }
 
+    private void _shareBytes(ReadableMap data, byte[] imageData) {
+        this._share(data, null, imageData);
+    }
+
+    private void _share(ReadableMap data) {
+        this._share(data, null, null);
+    }
+
+    private void _share(ReadableMap data, Bitmap bitmap, byte[] imageData) {
         this.registerShare();
         WeiboMultiMessage weiboMessage = new WeiboMultiMessage();//初始化微博的分享消息
 
         String type = RCTWBShareTypeNews;
-        if (data.hasKey(RCTWBShareType)){
+        if (data.hasKey(RCTWBShareType)) {
             type = data.getString(RCTWBShareType);
         }
 
@@ -262,31 +304,33 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
                 textObject.text = data.getString(RCTWBShareText);
             }
             weiboMessage.textObject = textObject;
-        }
-        else if (type.equals(RCTWBShareTypeImage)) {
-            ImageObject imageObject = new ImageObject();
-            if (bitmap != null) {
-                Log.e("share","hasBitmap");
+        } else if (type.equals(RCTWBShareTypeImage)) {
+            ImageObject imageObject = null;
+            if (imageData != null) {
+                Parcel parcel = Parcel.obtain();
+                parcel.writeByteArray(imageData);
+                parcel.setDataPosition(0);
+                imageObject = new ImageObject(parcel);
+                parcel.recycle();
+            } else if (bitmap != null) {
+                imageObject = new ImageObject();
                 imageObject.setImageObject(bitmap);
             }
             weiboMessage.imageObject = imageObject;
-        }
-        else {
+        } else {
             if (type.equals(RCTWBShareTypeNews)) {
                 WebpageObject webpageObject = new WebpageObject();
                 if (data.hasKey(RCTWBShareWebpageUrl)) {
                     webpageObject.actionUrl = data.getString(RCTWBShareWebpageUrl);
                 }
                 weiboMessage.mediaObject = webpageObject;
-            }
-            else if (type.equals(RCTWBShareTypeVideo)) {
+            } else if (type.equals(RCTWBShareTypeVideo)) {
                 VideoObject videoObject = new VideoObject();
                 if (data.hasKey(RCTWBShareWebpageUrl)) {
                     videoObject.dataUrl = data.getString(RCTWBShareWebpageUrl);
                 }
                 weiboMessage.mediaObject = videoObject;
-            }
-            else if (type.equals(RCTWBShareTypeAudio)) {
+            } else if (type.equals(RCTWBShareTypeAudio)) {
                 MusicObject musicObject = new MusicObject();
                 if (data.hasKey(RCTWBShareWebpageUrl)) {
                     musicObject.dataUrl = data.getString(RCTWBShareWebpageUrl);
@@ -339,8 +383,8 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         map.putString("errMsg", baseResponse.errMsg);
         map.putString("type", "WBSendMessageToWeiboResponse");
         gModule.getReactApplicationContext()
-                .getJSModule(RCTNativeAppEventEmitter.class)
-                .emit(RCTWBEventName, map);
+            .getJSModule(RCTNativeAppEventEmitter.class)
+            .emit(RCTWBEventName, map);
     }
 
     static public class SinaEntryActivity extends Activity implements IWeiboHandler.Response {
@@ -370,7 +414,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         return sinaAuthInfo;
     }
 
-    private void  _downloadImage(String imageUrl, ResizeOptions resizeOptions,DataSubscriber<CloseableReference<CloseableImage>> dataSubscriber) {
+    private void _downloadImage(String imageUrl, ResizeOptions resizeOptions, DataSubscriber<CloseableReference<PooledByteBuffer>> dataSubscriber) {
         Uri uri = null;
         try {
             uri = Uri.parse(imageUrl);
@@ -393,24 +437,25 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         ImageRequest imageRequest = builder.build();
 
         ImagePipeline imagePipeline = Fresco.getImagePipeline();
-        DataSource<CloseableReference<CloseableImage>> dataSource = imagePipeline.fetchDecodedImage(imageRequest, null);
+        DataSource<CloseableReference<PooledByteBuffer>> dataSource = imagePipeline.fetchEncodedImage(imageRequest, getReactApplicationContext());
         dataSource.subscribe(dataSubscriber, UiThreadImmediateExecutorService.getInstance());
     }
 
-    private static @Nullable
+    private static
+    @Nullable
     Uri _getResourceDrawableUri(Context context, @Nullable String name) {
         if (name == null || name.isEmpty()) {
             return null;
         }
         name = name.toLowerCase().replace("-", "_");
         int resId = context.getResources().getIdentifier(
-                name,
-                "drawable",
-                context.getPackageName());
+            name,
+            "drawable",
+            context.getPackageName());
         return new Uri.Builder()
-                .scheme(UriUtil.LOCAL_RESOURCE_SCHEME)
-                .path(String.valueOf(resId))
-                .build();
+            .scheme(UriUtil.LOCAL_RESOURCE_SCHEME)
+            .path(String.valueOf(resId))
+            .build();
     }
 
     private Drawable _createDrawable(CloseableReference<CloseableImage> image) {
@@ -419,14 +464,20 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         if (closeableImage instanceof CloseableStaticBitmap) {
             CloseableStaticBitmap closeableStaticBitmap = (CloseableStaticBitmap) closeableImage;
             BitmapDrawable bitmapDrawable = new BitmapDrawable(
-                    getReactApplicationContext().getResources(),
-                    closeableStaticBitmap.getUnderlyingBitmap());
+                getReactApplicationContext().getResources(),
+                closeableStaticBitmap.getUnderlyingBitmap());
             if (closeableStaticBitmap.getRotationAngle() == 0 ||
-                    closeableStaticBitmap.getRotationAngle() == EncodedImage.UNKNOWN_ROTATION_ANGLE) {
+                closeableStaticBitmap.getRotationAngle() == EncodedImage.UNKNOWN_ROTATION_ANGLE) {
                 return bitmapDrawable;
             } else {
                 return new OrientedDrawable(bitmapDrawable, closeableStaticBitmap.getRotationAngle());
             }
+        } else if (closeableImage instanceof CloseableAnimatedImage) {
+            AnimatedDrawableFactory animatedDrawableFactory = Fresco.getImagePipelineFactory().getAnimatedFactory().getAnimatedDrawableFactory(getReactApplicationContext());
+            if (animatedDrawableFactory != null) {
+                return animatedDrawableFactory.create(closeableImage);
+            }
+            return null;
         } else {
             throw new UnsupportedOperationException("Unrecognized image class: " + closeableImage);
         }
@@ -437,14 +488,14 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
             return ((BitmapDrawable) drawable).getBitmap();
         } else if (drawable instanceof NinePatchDrawable) {
             Bitmap bitmap = Bitmap
-                    .createBitmap(
-                            drawable.getIntrinsicWidth(),
-                            drawable.getIntrinsicHeight(),
-                            drawable.getOpacity() != PixelFormat.OPAQUE ? Bitmap.Config.ARGB_8888
-                                    : Bitmap.Config.RGB_565);
+                .createBitmap(
+                    drawable.getIntrinsicWidth(),
+                    drawable.getIntrinsicHeight(),
+                    drawable.getOpacity() != PixelFormat.OPAQUE ? Bitmap.Config.ARGB_8888
+                        : Bitmap.Config.RGB_565);
             Canvas canvas = new Canvas(bitmap);
             drawable.setBounds(0, 0, drawable.getIntrinsicWidth(),
-                    drawable.getIntrinsicHeight());
+                drawable.getIntrinsicHeight());
             drawable.draw(canvas);
             return bitmap;
         } else {
