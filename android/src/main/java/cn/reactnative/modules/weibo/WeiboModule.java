@@ -94,7 +94,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
 
     private static WeiboModule gModule = null;
 
-    public WeiboModule(ReactApplicationContext reactContext) {
+    WeiboModule(ReactApplicationContext reactContext) {
         super(reactContext);
         ApplicationInfo appInfo = null;
         try {
@@ -106,7 +106,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
             throw new Error("meta-data WB_APPID not found in AndroidManifest.xml");
         }
         this.appId = appInfo.metaData.getString("WB_APPID");
-        this.appId = this.appId.substring(2);
+        this.appId = this.appId != null ? this.appId.substring(2) : null;
     }
 
     @Override
@@ -198,7 +198,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         callback.invoke();
     }
 
-    public byte[] getBytes(InputStream inputStream) throws IOException {
+    private byte[] getBytes(InputStream inputStream) throws IOException {
         ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
         int bufferSize = 1024;
         byte[] buffer = new byte[bufferSize];
@@ -210,7 +210,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         return byteBuffer.toByteArray();
     }
 
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    private void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (mSinaSsoHandler != null) {
             mSinaSsoHandler.authorizeCallBack(requestCode, resultCode, data);
             mSinaSsoHandler = null;
@@ -225,11 +225,10 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
 
     }
 
-    WeiboAuthListener genWeiboAuthListener() {
+    private WeiboAuthListener genWeiboAuthListener() {
         return new WeiboAuthListener() {
             @Override
             public void onComplete(Bundle bundle) {
-
                 final Oauth2AccessToken token = Oauth2AccessToken.parseAccessToken(bundle);
                 WritableMap event = Arguments.createMap();
                 if (token.isSessionValid()) {
@@ -239,7 +238,6 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
                     event.putString("refreshToken", token.getRefreshToken());
                     event.putInt("errCode", 0);
                 } else {
-//                    String code = bundle.getString("code", "");
                     event.putInt("errCode", -1);
                     event.putString("errMsg", "token invalid");
                 }
@@ -349,7 +347,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         }
         boolean success = mSinaShareAPI.sendRequest(getCurrentActivity(), request, null, accessToken, genWeiboAuthListener());
 
-        if (success == false) {
+        if (!success) {
             WritableMap event = Arguments.createMap();
             event.putString("type", "WBAuthorizeResponse");
             event.putString("errMsg", "WeiBo API invoke returns false.");
@@ -358,16 +356,12 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         }
     }
 
-    public static boolean handleWeiboResponse(Intent intent, IWeiboHandler.Response response) {
+    private static boolean handleWeiboResponse(Intent intent, IWeiboHandler.Response response) {
         gModule.registerShare();
-        boolean ret = gModule.mSinaShareAPI.handleWeiboResponse(intent, response);
-        if (ret) {
-            return ret;
-        }
-        return ret;
+        return gModule.mSinaShareAPI.handleWeiboResponse(intent, response);
     }
 
-    public static void onShareResponse(BaseResponse baseResponse) {
+    private static void onShareResponse(BaseResponse baseResponse) {
         WritableMap map = Arguments.createMap();
         map.putInt("errCode", baseResponse.errCode);
         map.putString("errMsg", baseResponse.errMsg);
@@ -400,8 +394,7 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         if (config.hasKey("scope")) {
             scope = config.getString("scope");
         }
-        final AuthInfo sinaAuthInfo = new AuthInfo(getReactApplicationContext(), this.appId, redirectURI, scope);
-        return sinaAuthInfo;
+        return new AuthInfo(getReactApplicationContext(), this.appId, redirectURI, scope);
     }
 
     private void _downloadImage(String imageUrl, ResizeOptions resizeOptions, DataSubscriber<CloseableReference<PooledByteBuffer>> dataSubscriber) {
@@ -417,7 +410,6 @@ public class WeiboModule extends ReactContextBaseJavaModule implements ActivityE
         }
         if (uri == null) {
             uri = _getResourceDrawableUri(getReactApplicationContext(), imageUrl);
-        } else {
         }
 
         ImageRequestBuilder builder = ImageRequestBuilder.newBuilderWithSource(uri);
